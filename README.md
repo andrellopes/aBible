@@ -1,14 +1,13 @@
 # aBible (Android-only)
 
-App Flutter (Bíblia) – versão open-source sanitizada e focada em Android.
+App Flutter (Bíblia) – versão open-source focada em Android.
 
-Este repositório foi higienizado para remover credenciais e identificadores sensíveis (keystore, senhas, IDs do AdMob, etc.). Abaixo estão as instruções para configurar seu ambiente local e preencher os valores necessários para rodar e publicar sua própria versão.
+Este repositório contém o código fonte do app, com instruções para configurar seu ambiente local e publicar sua própria versão.
 
 ## Índice
 
 - [Como rodar localmente (Android)](#como-rodar-localmente-android)
 - [Configuração de Segredos e IDs (Android)](#configuração-de-segredos-e-ids-android)
-- [Itens higienizados](#itens-higienizados)
 - [Publicação (Google Play)](#publicação-google-play)
 - [Fonte dos Dados da Bíblia](#fonte-dos-dados-da-bíblia)
 - [Dependências Principais](#dependências-principais)
@@ -98,16 +97,6 @@ Referência de IDs de TESTE do Google (Android):
 
 - Se vier a usar, NÃO versione `android/app/google-services.json`.
 - Adicione-o localmente e mantenha-o fora do Git.
-
-## Itens higienizados
-
-- Removidos secrets do `android/gradle.properties`.
-- `android/app/build.gradle.kts` agora:
-  - injeta `ADMOB_APP_ID` via placeholder com fallback seguro (teste);
-  - assina release apenas se `key.properties` existir, caso contrário usa debug (para facilitar contribuições).
-- `android/AndroidManifest.xml` usa ID de TESTE do AdMob por padrão (via placeholder `ADMOB_APP_ID`).
-- `lib/constants/ad_ids.dart` contém apenas IDs de TESTE.
-- `android/key.properties.example` adicionado para facilitar configuração local.
 
 ## Publicação (Google Play)
 
