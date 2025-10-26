@@ -1,0 +1,770 @@
+# 📖 BookQuest — App Bíblico de Perguntas
+
+## 🧠 Visão Geral
+
+Aplicativo de perguntas bíblicas onde o usuário deve adivinhar de qual **livro da Bíblia** foi extraída uma determinada frase (versículo). A pontuação varia de acordo com a dificuldade e o usuário pode jogar uma sessão por dia, acumulando pontos e estatísticas semanais/mensais.
+
+---
+
+## 🚀 Funcionalidades do MVP
+
+### 🎮 Modo de Jogo
+* O usuário pode jogar uma vez por dia (controle por `daily_stats.date`)
+* Pode escolher o **nível de dificuldade**: `fácil`, `médio`, `difícil` ou `aleatório`
+* O jogo termina após **3 erros**
+* **Modo aleatório**: mistura versículos de todos os níveis (pontuação baseada no nível real do versículo)
+* **Sistema de streak**: conquistas baseadas em dias consecutivos jogando
+
+### 🧮 Pontuação
+| Dificuldade | Pontos por acerto |
+| ----------- | ----------------- |
+| Fácil       | 10                |
+| Médio       | 20                |
+| Difícil     | 30                |
+
+### 📊 Estatísticas
+* Acertos e erros por: Dia, Semana, Mês, Total geral
+* Melhor pontuação diária e semanal
+* Taxa de acertos por nível
+
+---
+
+## 🗂️ ESTRUTURA FINAL DO BANCO DE DADOS
+
+### ✅ **BANCO BÁSICO DA BÍBLIA (Assets)**
+```
+📁 assets/
+└── bible_nvi.db (5MB)
+    ├── book (66 livros)
+    ├── verse (31.105 versículos)  
+    ├── testament (AT/NT)
+    └── metadata
+```
+
+**🔄 FLUXO COMPLETO DE INICIALIZAÇÃO:**
+```
+📱 App Abre
+    ↓
+🔍 Verifica: /Documents/bible_quiz.db existe?
+    ↓
+❌ NÃO → 📥 Copia assets/bible_nvi.db para Documents/
+    ↓
+✅ SIM → 🔧 Abre banco existente
+    ↓
+🚀 Executa migrations (v1 → v2)
+    ↓
+📋 Cria tabelas: book_difficulty, user_responses, etc.
+    ↓  
+🌱 Popula seeds: 66 livros + conquistas
+    ↓
+✅ PRONTO: Banco completo funcionando!
+```
+
+**🎯 RESULTADO FINAL:**
+- ✅ **Banco da Bíblia preservado** (tabelas originais intactas)
+- ✅ **Funcionalidades do jogo adicionadas** (novas tabelas)
+- ✅ **Dados iniciais populados** (classificações + conquistas)
+- ✅ **Performance otimizada** (tudo local, sem downloads)
+
+### ✅ **TABELAS EXISTENTES (NÃO MODIFICAR)**
+```sql
+-- ⚡ JÁ EXISTEM NO ASSETS - Manter exatamente como está
+CREATE TABLE IF NOT EXISTS "book" (
+	"id"	INTEGER,
+	"book_reference_id"	INTEGER,
+	"testament_reference_id"	INTEGER,
+	"name"	TEXT
+);
+
+CREATE TABLE IF NOT EXISTS "verse" (
+	"id"	INTEGER,
+	"book_id"	INTEGER,
+	"chapter"	INTEGER,
+	"verse"	INTEGER,
+	"text"	TEXT
+);
+
+CREATE TABLE IF NOT EXISTS "testament" (
+	"id"	INTEGER,
+	"name"	TEXT
+);
+
+CREATE TABLE IF NOT EXISTS "metadata" (
+	"key"	TEXT,
+	"value"	TEXT
+);
+```
+
+### 🆕 **NOVAS TABELAS VIA MIGRATIONS (Depois da cópia)**
+```sql
+-- Classificação de dificuldade dos livros
+CREATE TABLE book_difficulty (
+  id INTEGER PRIMARY KEY,
+  book_name TEXT UNIQUE,
+  difficulty_level TEXT CHECK(difficulty_level IN ('fácil', 'médio', 'difícil')),
+  points_value INTEGER,
+  testament_type TEXT CHECK(testament_type IN ('AT', 'NT')),
+  popularity_score INTEGER CHECK(popularity_score BETWEEN 1 AND 10)
+);
+
+-- Controle de versículos para quiz
+CREATE TABLE verse_quiz_data (
+  id INTEGER PRIMARY KEY,
+  verse_id INTEGER UNIQUE,
+  is_quiz_eligible BOOLEAN DEFAULT 1,
+  word_count INTEGER,
+  character_count INTEGER,
+  last_used_date TEXT,
+  usage_count INTEGER DEFAULT 0,
+  blacklist_reason TEXT, -- 'too_short', 'common_phrase', 'manual'
+  FOREIGN KEY (verse_id) REFERENCES verse(id)
+);
+
+-- Black list de frases comuns impossíveis de identificar
+CREATE TABLE verse_blacklist_phrases (
+  id INTEGER PRIMARY KEY,
+  phrase TEXT UNIQUE,
+  reason TEXT,
+  testament_type TEXT -- 'AT', 'NT', 'BOTH'
+);
+
+-- Respostas do usuário
+CREATE TABLE user_responses (
+  id INTEGER PRIMARY KEY,
+  verse_id INTEGER,
+  session_id TEXT,
+  date_answered DATETIME DEFAULT CURRENT_TIMESTAMP,
+  correct BOOLEAN,
+  difficulty_chosen TEXT,
+  alternatives_shown TEXT,
+  time_to_answer INTEGER,
+  points_earned INTEGER,
+  FOREIGN KEY (verse_id) REFERENCES verse(id)
+);
+
+-- Sessões de jogo
+CREATE TABLE game_sessions (
+  id TEXT PRIMARY KEY,
+  start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  end_time DATETIME,
+  difficulty_level TEXT,
+  total_questions INTEGER DEFAULT 0,
+  correct_answers INTEGER DEFAULT 0,
+  wrong_answers INTEGER DEFAULT 0,
+  total_points INTEGER DEFAULT 0,
+  session_completed BOOLEAN DEFAULT 0,
+  best_streak INTEGER DEFAULT 0
+);
+
+-- Estatísticas diárias
+CREATE TABLE daily_stats (
+  id INTEGER PRIMARY KEY,
+  date TEXT UNIQUE,
+  sessions_played INTEGER DEFAULT 0,
+  total_questions INTEGER DEFAULT 0,
+  correct_answers INTEGER DEFAULT 0,
+  total_points INTEGER DEFAULT 0,
+  best_session_points INTEGER DEFAULT 0,
+  easy_correct INTEGER DEFAULT 0,
+  medium_correct INTEGER DEFAULT 0,
+  hard_correct INTEGER DEFAULT 0
+);
+
+-- Sistema de conquistas
+CREATE TABLE achievements (
+  id INTEGER PRIMARY KEY,
+  name TEXT UNIQUE,
+  description TEXT,
+  icon TEXT,
+  unlock_condition TEXT,
+  unlocked_at DATETIME,
+  is_unlocked BOOLEAN DEFAULT 0
+);
+```
+
+### 🌱 **SEED DOS 66 LIVROS DA BÍBLIA (Minha responsabilidade!)**
+```sql
+-- 🟢 FÁCIL (10 pontos) - 15 livros mais populares e conhecidos
+INSERT INTO book_difficulty (book_name, difficulty_level, points_value, testament_type, popularity_score) VALUES
+-- Antigo Testamento (8 livros)
+('Salmos', 'fácil', 10, 'AT', 10),        -- Livro mais lido
+('Provérbios', 'fácil', 10, 'AT', 9),     -- Muito citado
+('Gênesis', 'fácil', 10, 'AT', 10),       -- Criação, Noé, Abraão
+('Êxodo', 'fácil', 10, 'AT', 9),          -- Moisés, 10 Mandamentos
+('Deuteronômio', 'fácil', 10, 'AT', 7),   -- Repetição da lei
+('Josué', 'fácil', 10, 'AT', 7),          -- Conquista da Terra Prometida
+('1 Samuel', 'fácil', 10, 'AT', 8),       -- Davi vs Golias
+('2 Samuel', 'fácil', 10, 'AT', 7),       -- Reino de Davi
+
+-- Novo Testamento (7 livros)
+('Mateus', 'fácil', 10, 'NT', 10),        -- Evangelho mais conhecido
+('Marcos', 'fácil', 10, 'NT', 8),         -- Evangelho mais curto
+('Lucas', 'fácil', 10, 'NT', 9),          -- Médico, detalhado
+('João', 'fácil', 10, 'NT', 10),          -- "Deus amou o mundo"
+('Atos', 'fácil', 10, 'NT', 8),           -- Igreja primitiva
+('Romanos', 'fácil', 10, 'NT', 9),        -- Teologia de Paulo
+('1 Coríntios', 'fácil', 10, 'NT', 8);    -- Amor em 1 Co 13
+
+-- 🟡 MÉDIO (20 pontos) - 25 livros conhecidos mas menos populares  
+INSERT INTO book_difficulty (book_name, difficulty_level, points_value, testament_type, popularity_score) VALUES
+-- Antigo Testamento (15 livros)
+('Levítico', 'médio', 20, 'AT', 4),       -- Leis, sacrifícios
+('Números', 'médio', 20, 'AT', 3),        -- 40 anos no deserto
+('Juízes', 'médio', 20, 'AT', 6),         -- Sansão, Gideão
+('Rute', 'médio', 20, 'AT', 7),           -- História linda
+('1 Reis', 'médio', 20, 'AT', 6),         -- Salomão, Elias
+('2 Reis', 'médio', 20, 'AT', 5),         -- Profetas
+('1 Crônicas', 'médio', 20, 'AT', 3),     -- Genealogias
+('2 Crônicas', 'médio', 20, 'AT', 3),     -- História dos reis
+('Esdras', 'médio', 20, 'AT', 3),         -- Reconstrução
+('Neemias', 'médio', 20, 'AT', 4),        -- Muros de Jerusalém
+('Ester', 'médio', 20, 'AT', 6),          -- Rainha corajosa
+('Jó', 'médio', 20, 'AT', 7),             -- Sofrimento
+('Eclesiastes', 'médio', 20, 'AT', 8),    -- "Tudo é vaidade"
+('Cantares', 'médio', 20, 'AT', 4),       -- Amor poético
+('Isaías', 'médio', 20, 'AT', 8),         -- Grande profeta
+
+-- Novo Testamento (10 livros)
+('2 Coríntios', 'médio', 20, 'NT', 6),    -- Paulo se defende
+('Gálatas', 'médio', 20, 'NT', 6),        -- Liberdade cristã
+('Efésios', 'médio', 20, 'NT', 7),        -- Igreja corpo de Cristo
+('Filipenses', 'médio', 20, 'NT', 7),     -- Alegria na prisão
+('Colossenses', 'médio', 20, 'NT', 6),    -- Cristo supremo
+('1 Tessalonicenses', 'médio', 20, 'NT', 5), -- Segunda vinda
+('2 Tessalonicenses', 'médio', 20, 'NT', 4), -- Escatologia
+('Hebreus', 'médio', 20, 'NT', 7),        -- Cristo sumo sacerdote
+('Tiago', 'médio', 20, 'NT', 7),          -- Fé e obras
+('1 Pedro', 'médio', 20, 'NT', 6);        -- Sofrimento cristão
+
+-- 🔴 DIFÍCIL (30 pontos) - 26 livros menos conhecidos e específicos
+INSERT INTO book_difficulty (book_name, difficulty_level, points_value, testament_type, popularity_score) VALUES
+-- Antigo Testamento (17 livros - Profetas menores + outros)
+('Jeremias', 'difícil', 30, 'AT', 5),     -- Profeta chorão
+('Lamentações', 'difícil', 30, 'AT', 2),  -- Lamento por Jerusalém
+('Ezequiel', 'difícil', 30, 'AT', 4),     -- Visões estranhas
+('Daniel', 'difícil', 30, 'AT', 6),       -- Apocalíptico
+('Oséias', 'difícil', 30, 'AT', 3),       -- Casamento simbólico
+('Joel', 'difícil', 30, 'AT', 2),         -- Gafanhotos
+('Amós', 'difícil', 30, 'AT', 3),         -- Justiça social
+('Obadias', 'difícil', 30, 'AT', 1),      -- Menor livro AT
+('Jonas', 'difícil', 30, 'AT', 6),        -- Peixe grande (conhecido mas pequeno)
+('Miquéias', 'difícil', 30, 'AT', 3),     -- Nascimento em Belém
+('Naum', 'difícil', 30, 'AT', 1),         -- Queda de Nínive
+('Habacuque', 'difícil', 30, 'AT', 2),    -- "O justo viverá pela fé"
+('Sofonias', 'difícil', 30, 'AT', 1),     -- Dia do Senhor
+('Ageu', 'difícil', 30, 'AT', 1),         -- Reconstrução do templo
+('Zacarias', 'difícil', 30, 'AT', 3),     -- Visões messiânicas
+('Malaquias', 'difícil', 30, 'AT', 3);    -- Último profeta AT
+
+-- Novo Testamento (9 livros - Cartas menores)
+INSERT INTO book_difficulty (book_name, difficulty_level, points_value, testament_type, popularity_score) VALUES
+('1 Timóteo', 'difícil', 30, 'NT', 4),    -- Pastoral
+('2 Timóteo', 'difícil', 30, 'NT', 4),    -- Última carta de Paulo
+('Tito', 'difícil', 30, 'NT', 3),         -- Organização da igreja
+('Filemom', 'difícil', 30, 'NT', 2),      -- Menor livro NT
+('2 Pedro', 'difícil', 30, 'NT', 3),      -- Falsos mestres
+('1 João', 'difícil', 30, 'NT', 5),       -- "Deus é amor"
+('2 João', 'difícil', 30, 'NT', 1),       -- Carta curtinha
+('3 João', 'difícil', 30, 'NT', 1),       -- Sobre hospitalidade
+('Judas', 'difícil', 30, 'NT', 2),        -- Contra falsos mestres
+('Apocalipse', 'difícil', 30, 'NT', 6);   -- Revelação (complexo)
+
+-- 🏆 CONQUISTAS INICIAIS (também minha responsabilidade!)
+INSERT INTO achievements (name, description, icon, unlock_condition, is_unlocked) VALUES
+('Primeiro Passo', 'Complete sua primeira sessão', 'first_step', '{"sessions_completed": 1}', 0),
+('Persistente', 'Jogue 3 dias consecutivos', 'persistent', '{"consecutive_days": 3}', 0),
+('Conhecedor', 'Acerte 20 perguntas', 'knowledgeable', '{"total_correct": 20}', 0),
+('Especialista', 'Acerte 50 perguntas', 'expert', '{"total_correct": 50}', 0),
+('Mestre dos Salmos', 'Acerte 10 versículos de Salmos', 'psalms_master', '{"book_correct": {"Salmos": 10}}', 0),
+('Perfeccionista', 'Complete uma sessão sem erros', 'perfectionist', '{"perfect_session": 1}', 0),
+('Desbravador', 'Acerte pelo menos um versículo de cada dificuldade', 'explorer', '{"all_difficulties": 1}', 0);
+
+-- 🚫 BLACK LIST DE FRASES COMUNS (Minha responsabilidade!)
+INSERT INTO verse_blacklist_phrases (phrase, reason, testament_type) VALUES
+-- Frases do Antigo Testamento
+('então disse o senhor', 'Frase genérica repetida centenas de vezes', 'AT'),
+('assim diz o senhor', 'Frase profética genérica', 'AT'),
+('palavra do senhor', 'Frase genérica', 'BOTH'),
+('respondeu e disse', 'Estrutura de diálogo comum', 'AT'),
+('veio a palavra do senhor', 'Início profético padrão', 'AT'),
+('disse o senhor dos exércitos', 'Frase militar genérica', 'AT'),
+('então respondeu', 'Início de resposta genérico', 'BOTH'),
+('e disse-lhe', 'Estrutura de diálogo', 'BOTH'),
+('responderam os', 'Início de resposta coletiva', 'AT'),
+('filhos de israel', 'Referência genérica ao povo', 'AT'),
+('casa de israel', 'Referência genérica', 'AT'),
+('habitaram na terra', 'Descrição geográfica comum', 'AT'),
+('nos dias de', 'Referência temporal genérica', 'BOTH'),
+('aconteceu que', 'Início narrativo comum', 'AT'),
+('naqueles dias', 'Referência temporal', 'BOTH'),
+
+-- Frases do Novo Testamento
+('jesus disse', 'Muito genérico', 'NT'),
+('respondeu jesus', 'Muito comum', 'NT'),
+('disse-lhes jesus', 'Estrutura comum', 'NT'),
+('perguntaram-lhe', 'Início de pergunta genérico', 'NT'),
+('ele lhes disse', 'Estrutura narrativa', 'NT'),
+('respondeu-lhe', 'Resposta genérica', 'NT'),
+('disse aos seus discípulos', 'Muito comum nos evangelhos', 'NT'),
+('verdadeiramente vos digo', 'Frase característica mas repetida', 'NT'),
+('em verdade vos digo', 'Variação da anterior', 'NT'),
+('irmãos', 'Muito genérico nas cartas', 'NT'),
+('graça e paz', 'Saudação padrão das cartas', 'NT'),
+('o senhor jesus cristo', 'Referência genérica', 'NT'),
+('no nome de jesus', 'Frase comum', 'NT'),
+('pelo poder de deus', 'Expressão genérica', 'NT');
+```
+
+---
+
+## 🔧 SETUP DO PROJETO FLUTTER
+
+### �️ **PROCESSO DE INICIALIZAÇÃO DO BANCO**
+```dart
+// lib/database/database_helper.dart
+class DatabaseHelper {
+  static final DatabaseHelper _instance = DatabaseHelper._internal();
+  factory DatabaseHelper() => _instance;
+  DatabaseHelper._internal();
+  
+  Database? _database;
+  static const int DATABASE_VERSION = 2; // Versão com migrations
+  
+  Future<Database> get database async {
+    _database ??= await _initDatabase();
+    return _database!;
+  }
+  
+  Future<Database> _initDatabase() async {
+    String databasesPath = await getDatabasesPath();
+    String path = join(databasesPath, 'bible_quiz.db');
+    
+    // 📋 PASSO 1: Verificar se banco já existe
+    if (!await File(path).exists()) {
+      print('🔄 Primeira execução: Copiando banco da Bíblia...');
+      
+      // 📋 PASSO 2: Copiar banco básico do assets
+      ByteData data = await rootBundle.load('assets/bible_nvi.db');
+      List<int> bytes = data.buffer.asUint8List();
+      await File(path).writeAsBytes(bytes);
+      
+      print('✅ Banco da Bíblia copiado com sucesso!');
+    }
+    
+    // 📋 PASSO 3: Abrir banco e executar migrations
+    return await openDatabase(
+      path,
+      version: DATABASE_VERSION,
+      onUpgrade: _runMigrations,
+    );
+  }
+  
+  // 🚀 MIGRATIONS: Adicionar tabelas do jogo
+  Future<void> _runMigrations(Database db, int oldVersion, int newVersion) async {
+    print('🔄 Executando migrations v$oldVersion → v$newVersion...');
+    
+    if (oldVersion < 2) {
+      // Criar todas as tabelas do jogo
+      await _createGameTables(db);
+      // Popular dados iniciais
+      await _populateInitialData(db);
+      // ✅ NOVO: Analisar e filtrar versículos
+      await _analyzeVerses(db);
+    }
+    
+    print('✅ Migrations concluídas!');
+  }
+  
+  // � CRIAR TABELAS DO JOGO
+  Future<void> _createGameTables(Database db) async {
+    print('📋 Criando tabelas do jogo...');
+    
+    // Todas as queries CREATE TABLE já documentadas acima
+    await db.execute('''CREATE TABLE book_difficulty (
+      id INTEGER PRIMARY KEY,
+      book_name TEXT UNIQUE,
+      difficulty_level TEXT CHECK(difficulty_level IN ('fácil', 'médio', 'difícil')),
+      points_value INTEGER,
+      testament_type TEXT CHECK(testament_type IN ('AT', 'NT')),
+      popularity_score INTEGER CHECK(popularity_score BETWEEN 1 AND 10)
+    )''');
+    
+    await db.execute('''CREATE TABLE verse_quiz_data (
+      id INTEGER PRIMARY KEY,
+      verse_id INTEGER UNIQUE,
+      is_quiz_eligible BOOLEAN DEFAULT 1,
+      word_count INTEGER,
+      character_count INTEGER,
+      last_used_date TEXT,
+      usage_count INTEGER DEFAULT 0,
+      blacklist_reason TEXT,
+      FOREIGN KEY (verse_id) REFERENCES verse(id)
+    )''');
+    
+    await db.execute('''CREATE TABLE verse_blacklist_phrases (
+      id INTEGER PRIMARY KEY,
+      phrase TEXT UNIQUE,
+      reason TEXT,
+      testament_type TEXT
+    )''');
+    
+    await db.execute('''CREATE TABLE user_responses (
+      id INTEGER PRIMARY KEY,
+      verse_id INTEGER,
+      session_id TEXT,
+      date_answered DATETIME DEFAULT CURRENT_TIMESTAMP,
+      correct BOOLEAN,
+      difficulty_chosen TEXT,
+      alternatives_shown TEXT,
+      time_to_answer INTEGER,
+      points_earned INTEGER,
+      FOREIGN KEY (verse_id) REFERENCES verse(id)
+    )''');
+    
+    await db.execute('''CREATE TABLE game_sessions (
+      id TEXT PRIMARY KEY,
+      start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+      end_time DATETIME,
+      difficulty_level TEXT,
+      total_questions INTEGER DEFAULT 0,
+      correct_answers INTEGER DEFAULT 0,
+      wrong_answers INTEGER DEFAULT 0,
+      total_points INTEGER DEFAULT 0,
+      session_completed BOOLEAN DEFAULT 0,
+      best_streak INTEGER DEFAULT 0
+    )''');
+    
+    await db.execute('''CREATE TABLE daily_stats (
+      id INTEGER PRIMARY KEY,
+      date TEXT UNIQUE,
+      sessions_played INTEGER DEFAULT 0,
+      total_questions INTEGER DEFAULT 0,
+      correct_answers INTEGER DEFAULT 0,
+      total_points INTEGER DEFAULT 0,
+      best_session_points INTEGER DEFAULT 0,
+      easy_correct INTEGER DEFAULT 0,
+      medium_correct INTEGER DEFAULT 0,
+      hard_correct INTEGER DEFAULT 0
+    )''');
+    
+    await db.execute('''CREATE TABLE achievements (
+      id INTEGER PRIMARY KEY,
+      name TEXT UNIQUE,
+      description TEXT,
+      icon TEXT,
+      unlock_condition TEXT,
+      unlocked_at DATETIME,
+      is_unlocked BOOLEAN DEFAULT 0
+    )''');
+  }
+  
+  // 🌱 POPULAR DADOS INICIAIS
+  Future<void> _populateInitialData(Database db) async {
+    print('🌱 Populando dados iniciais...');
+    
+    // Todos os INSERTs já documentados acima
+    // book_difficulty (66 livros)
+    // achievements (7 conquistas iniciais)  
+    // verse_blacklist_phrases (28 frases)
+    
+    // Executar todos os comandos INSERT do seed documentado
+    // (Por brevidade, referenciando o código SQL já documentado acima)
+  }
+  
+  // �🔍 ANALISAR QUALIDADE DOS VERSÍCULOS
+  Future<void> _analyzeVerses(Database db) async {
+    print('🔍 Analisando qualidade dos versículos...');
+    
+    // Buscar todos os versículos
+    List<Map<String, dynamic>> verses = await db.query('verse');
+    
+    for (var verse in verses) {
+      int verseId = verse['id'];
+      String text = verse['text'] ?? '';
+      
+      bool isEligible = true;
+      String? blacklistReason;
+      
+      // ❌ Filtro 1: Muito curto (menos de 50 caracteres)
+      if (text.length < 50) {
+        isEligible = false;
+        blacklistReason = 'too_short';
+      }
+      
+      // ❌ Filtro 2: Muito longo (mais de 300 caracteres)
+      if (text.length > 300) {
+        isEligible = false;
+        blacklistReason = 'too_long';
+      }
+      
+      // ❌ Filtro 3: Verifica contra blacklist de frases
+      if (isEligible) {
+        List<Map<String, dynamic>> blacklistPhrases = 
+          await db.query('verse_blacklist_phrases');
+        
+        for (var phrase in blacklistPhrases) {
+          if (text.toLowerCase().contains(phrase['phrase'].toLowerCase())) {
+            isEligible = false;
+            blacklistReason = 'common_phrase';
+            break;
+          }
+        }
+      }
+      
+      // ❌ Filtro 4: Padrões problemáticos
+      if (isEligible) {
+        if (text.toLowerCase().startsWith('então ') ||
+            text.toLowerCase().startsWith('e ') ||
+            text.contains('disse') && text.split('disse').length > 2) {
+          isEligible = false;
+          blacklistReason = 'dialogue_pattern';
+        }
+      }
+      
+      // Inserir na tabela de controle
+      await db.insert('verse_quiz_data', {
+        'verse_id': verseId,
+        'is_quiz_eligible': isEligible ? 1 : 0,
+        'word_count': text.split(' ').length,
+        'character_count': text.length,
+        'blacklist_reason': blacklistReason,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    
+    // Estatísticas
+    int total = verses.length;
+    int eligible = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM verse_quiz_data WHERE is_quiz_eligible = 1'
+    ).then((result) => result.first['count'] as int);
+    
+    print('✅ Análise concluída: $eligible/$total versículos elegíveis');
+  }
+}
+```
+
+### �📦 pubspec.yaml
+```yaml
+name: a_bible
+description: Quiz bíblico - Descubra de qual livro é o versículo!
+version: 1.0.0+1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Database
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  
+  # UI & Charts
+  fl_chart: ^0.64.0
+  google_fonts: ^6.1.0
+  
+  # State Management
+  provider: ^6.0.5
+  
+  # Utilities
+  intl: ^0.18.1
+  uuid: ^4.1.0
+  
+  # Ads
+  google_mobile_ads: ^4.0.0
+
+flutter:
+  assets:
+    - assets/bible_nvi.db
+    - assets/images/
+```
+
+### 📁 Estrutura de Pastas
+```
+lib/
+├── main.dart
+├── constants/
+│   ├── app_colors.dart
+│   └── app_strings.dart
+├── models/
+│   ├── verse_model.dart
+│   ├── question_model.dart
+│   └── game_session_model.dart
+├── database/
+│   ├── database_helper.dart
+│   └── bible_repository.dart
+├── services/
+│   ├── question_generator.dart
+│   ├── game_session_service.dart
+│   └── ads_service.dart
+├── providers/
+│   └── game_provider.dart
+├── screens/
+│   ├── home_screen.dart
+│   ├── difficulty_screen.dart
+│   ├── game_screen.dart
+│   └── statistics_screen.dart
+└── widgets/
+    ├── question_card.dart
+    └── alternative_button.dart
+```
+
+---
+
+## 🎯 ESTRATÉGIA DE DIFICULDADE
+
+### 📚 Classificação dos Livros
+**FÁCIL (10 pontos)** - Livros populares:
+- Salmos, Provérbios, Gênesis, João, Mateus, Romanos
+
+**MÉDIO (20 pontos)** - Conhecidos mas menos populares:
+- Isaías, Jeremias, Daniel, Atos, Hebreus, Apocalipse
+
+**DIFÍCIL (30 pontos)** - Livros menos conhecidos:
+- Levítico, Números, 1 Crônicas, Esdras, Naum, Filemom, etc.
+
+### 🎲 Geração de Alternativas
+1. Buscar 3 livros do mesmo testamento (AT/NT)
+2. Priorizar por popularidade similar
+3. Incluir resposta correta
+4. Embaralhar ordem
+
+---
+
+## 💡 LÓGICA PRINCIPAL DO JOGO
+
+### 🔍 Query para Buscar Versículo (COM FILTROS DE QUALIDADE)
+```sql
+-- Para dificuldades específicas (fácil, médio, difícil)
+SELECT 
+  v.id, v.text, b.name as book_name, 
+  v.chapter, v.verse,
+  bd.difficulty_level, bd.points_value
+FROM verse v
+JOIN book b ON v.book_id = b.id
+JOIN book_difficulty bd ON b.name = bd.book_name
+LEFT JOIN verse_quiz_data vqd ON v.id = vqd.verse_id
+WHERE bd.difficulty_level = :difficulty
+  -- ✅ Filtros de qualidade (já implementados acima)
+  AND LENGTH(v.text) BETWEEN 50 AND 300
+  AND vqd.is_quiz_eligible = 1
+  AND vqd.blacklist_reason IS NULL
+  AND NOT EXISTS (SELECT 1 FROM verse_blacklist_phrases vbp 
+                  WHERE LOWER(v.text) LIKE '%' || LOWER(vbp.phrase) || '%')
+  AND v.id NOT IN (SELECT verse_id FROM user_responses 
+                   WHERE date_answered >= date('now', '-7 days'))
+ORDER BY RANDOM() LIMIT 1;
+
+-- Para modo ALEATÓRIO (todos os níveis)
+SELECT 
+  v.id, v.text, b.name as book_name, 
+  v.chapter, v.verse,
+  bd.difficulty_level, bd.points_value
+FROM verse v
+JOIN book b ON v.book_id = b.id
+JOIN book_difficulty bd ON b.name = bd.book_name
+LEFT JOIN verse_quiz_data vqd ON v.id = vqd.verse_id
+WHERE vqd.is_quiz_eligible = 1
+  AND vqd.blacklist_reason IS NULL
+  AND LENGTH(v.text) BETWEEN 50 AND 300
+  AND NOT EXISTS (SELECT 1 FROM verse_blacklist_phrases vbp 
+                  WHERE LOWER(v.text) LIKE '%' || LOWER(vbp.phrase) || '%')
+  AND v.id NOT IN (SELECT verse_id FROM user_responses 
+                   WHERE date_answered >= date('now', '-7 days'))
+ORDER BY RANDOM() LIMIT 1;
+```
+
+### 🎯 Query para Gerar Alternativas (INTELIGENTE)
+```sql
+-- Buscar alternativas do mesmo testamento, evitando a resposta correta
+SELECT DISTINCT b.name, bd.difficulty_level
+FROM book b
+JOIN book_difficulty bd ON b.name = bd.book_name
+JOIN testament t ON b.testament_reference_id = t.id
+WHERE t.name = :testament_name  -- 'Antigo Testamento' ou 'Novo Testamento'
+  AND b.name != :correct_answer
+  AND bd.difficulty_level IN (
+    -- Para fácil: só fácil e médio
+    CASE WHEN :correct_difficulty = 'fácil' 
+         THEN ('fácil', 'médio') 
+    -- Para médio: fácil, médio e difícil  
+    WHEN :correct_difficulty = 'médio' 
+         THEN ('fácil', 'médio', 'difícil')
+    -- Para difícil: médio e difícil
+    ELSE ('médio', 'difícil') END
+  )
+ORDER BY 
+  -- Priorizar dificuldade similar
+  CASE WHEN bd.difficulty_level = :correct_difficulty THEN 1 ELSE 2 END,
+  bd.popularity_score DESC,
+  RANDOM()
+LIMIT 3;
+
+-- FALLBACK: Se não houver 3 alternativas do mesmo testamento
+SELECT DISTINCT b.name 
+FROM book b
+JOIN book_difficulty bd ON b.name = bd.book_name
+WHERE b.name != :correct_answer
+ORDER BY bd.popularity_score DESC, RANDOM()
+LIMIT 3;
+```
+
+### 🎮 Controle de Sessão Diária
+```sql
+-- Verificar se já jogou hoje
+SELECT COUNT(*) as sessions_today 
+FROM daily_stats 
+WHERE date = DATE('now');
+
+-- Se sessions_today > 0, bloquear novo jogo
+-- Senão, permitir nova sessão
+```
+
+---
+
+## 💰 Monetização
+* Apenas AdMob com banner discreto (sem intersticial ou vídeo)
+
+---
+
+## 📋 CHECKLIST DE IMPLEMENTAÇÃO
+
+### ✅ Funcionalidades Core
+- [ ] Sistema de perguntas funcionando 100%
+- [ ] Geração automática de alternativas  
+- [ ] Sistema de pontuação correto
+- [ ] Limite de 3 erros por sessão
+- [ ] Rotatividade de perguntas (sem repetição)
+
+### ✅ Interface e UX
+- [ ] Design responsivo (telefones/tablets)
+- [ ] Animações suaves e fluidas
+- [ ] Feedback visual claro
+- [ ] Loading states em todas as operações
+
+### ✅ Banco de Dados
+- [ ] SQLite funciona offline 100%
+- [ ] Migrations implementadas
+- [ ] Performance otimizada (consultas < 100ms)
+
+### ✅ Monetização
+- [ ] AdMob configurado e testado
+- [ ] Banners não-intrusivos
+- [ ] IDs de produção configurados
+
+---
+
+## 🚀 PRÓXIMOS PASSOS
+1. **Configurar** migrations no Flutter
+2. **Popular** tabela book_difficulty com classificações
+3. **Implementar** gerador de perguntas
+4. **Desenvolver** telas principais
+5. **Integrar** AdMob
+6. **Testes** em dispositivos reais
+
+---
+
+## 🎉 META FINAL
+**Criar o "Duolingo da Bíblia"** - um app viciante, educativo e lucrativo com:
+- 📚 31.105 versículos de conteúdo infinito
+- 🎮 Gamificação completa
+- 📊 Estatísticas detalhadas  
+- 💰 Monetização discreta
+- ⚡ 100% offline e rápido

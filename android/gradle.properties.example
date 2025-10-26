@@ -1,0 +1,8 @@
+# EXEMPLO de gradle.properties (NÃO COMITAR valores sensíveis)
+# Copie para android/gradle.properties e ajuste localmente.
+# Este arquivo pode injetar o App ID do AdMob via placeholder de manifesto.
+
+# AdMob App ID (Android)
+# ADMOB_APP_ID=ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy
+
+# OBS: Senhas de keystore NÃO devem ficar aqui. Use android/key.properties.

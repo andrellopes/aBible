@@ -1,0 +1,8 @@
+# EXEMPLO de configuração de keystore para assinatura de release (NÃO COMITAR key.properties real)
+# Copie este arquivo para android/key.properties e preencha com seus dados.
+# O arquivo key.properties real é ignorado pelo git (android/.gitignore).
+
+storeFile=../release-key.jks
+storePassword=COLOQUE_SUA_SENHA_AQUI
+keyAlias=SEU_ALIAS_AQUI
+keyPassword=COLOQUE_SUA_SENHA_AQUI
