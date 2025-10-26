@@ -1,9 +1,9 @@
 /// EXEMPLO de IDs do AdMob para substituir em produção.
-/// Copie para `lib/constants/ad_ids.dart` e preencha com seus IDs reais.
+/// Copie para `lib/constants/ad_ids.local.dart` e preencha com seus IDs reais.
 /// NUNCA comite seus IDs reais se não desejar expor sua conta.
 /// Para desenvolvimento, você pode manter os IDs de teste do Google.
 
-class AdIds {
+class AdIdsExample {
   // App ID da sua conta (Android)
   static const String admobAppIdAndroid = 'ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy';
 

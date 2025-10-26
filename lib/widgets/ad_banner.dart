@@ -3,7 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-import '../constants/ad_ids.dart';
+import '../constants/ad_ids.local.dart';
 
 /// Banner de anúncios (AdMob) discreto para o rodapé.
 /// Usa AdSize.largeBanner (altura ~100dp) conforme pedido.

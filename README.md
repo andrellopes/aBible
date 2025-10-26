@@ -81,7 +81,7 @@ Observações:
   - Opcional: defina em `android/gradle.properties` (não comite segredos):
     - `ADMOB_APP_ID=ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy`
   - Se não definir, um App ID de TESTE do Google será usado por padrão.
-- Unidades de anúncio (ad units): edite `lib/constants/ad_ids.dart` e substitua os IDs de TESTE pelos seus IDs reais.
+- Unidades de anúncio (ad units): edite `lib/constants/ad_ids.local.dart` e substitua os IDs de TESTE pelos seus IDs reais (arquivo local não versionado).
 
 Referência de IDs de TESTE do Google (Android):
 
@@ -129,7 +129,7 @@ Aqui vão algumas dicas para problemas comuns:
 
 - **Erro ao executar `flutter run`**: Certifique-se de que um dispositivo Android está conectado ou um emulador está rodando. Verifique com `flutter devices`.
 - **Build falha**: Execute `flutter clean` e `flutter pub get`. Verifique se JDK 11+ está instalado e configurado.
-- **Anúncios AdMob não aparecem**: Em desenvolvimento, use os IDs de teste. Para produção, substitua por IDs reais no `lib/constants/ad_ids.dart`.
+- **Anúncios AdMob não aparecem**: Em desenvolvimento, use os IDs de teste. Para produção, substitua por IDs reais no `lib/constants/ad_ids.local.dart`.
 - **Compras no app não funcionam**: Configure os produtos no Google Play Console e certifique-se de que o ID em `lib/services/purchase_service.dart` corresponde.
 - **Problemas com keystore**: Se houver erros de assinatura, gere uma nova keystore ou verifique as senhas em `android/key.properties`.
 

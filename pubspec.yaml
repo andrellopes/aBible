@@ -2,7 +2,7 @@ name: a_bible
 description: Leitor de Bíblia com funcionalidades avançadas - leitura, bookmarks, temas personalizados e muito mais
 publish_to: 'none'
 
-version: 2.0.4+7
+version: 2.0.4+8
 
 environment:
   sdk: ^3.8.1

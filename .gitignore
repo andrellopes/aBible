@@ -16,7 +16,8 @@ secrets.json
 *.p12
 *.pfx
 **/android/gradle.properties  # contém ADMOB_APP_ID real
-**/lib/constants/ad_ids.dart  # contém IDs reais (use .example)
+**/lib/constants/ad_ids.dart  # antigo/placeholder; usar ad_ids.local.dart
+**/lib/constants/ad_ids.local.dart  # contém IDs reais (arquivo ativo usado pelo app)
 
 # Flutter repo-specific
 /bin/cache/
@@ -74,8 +75,7 @@ unlinked_spec.ds
 # **/android/gradle.properties.example
 # **/android/key.properties.example
 # **/lib/constants/ad_ids.example.dart
-# Caso prefira manter um arquivo local não rastreado
-**/lib/constants/ad_ids.local.dart
+# Caso prefira manter um arquivo local não rastreado (linha acima já cobre)
 
 # Coverage
 coverage/
